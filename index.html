@@ -38,6 +38,7 @@
   --safe-t:env(safe-area-inset-top, 0px);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+input[type=checkbox]{accent-color:var(--ink);width:18px;height:18px}
 html,body{margin:0;background:var(--grey);color:var(--ink)}
 body{
   font-family:var(--sans);font-size:16px;line-height:1.5;min-height:100vh;
@@ -197,6 +198,17 @@ button{cursor:pointer;background:none;border:0;padding:0}
 @keyframes sp{to{transform:rotate(360deg)}}
 .loading{padding:40px 0;text-align:center;color:var(--mute)}
 
+/* ── Einstellungen ───────────────────────── */
+.set{display:flex;flex-direction:column;gap:12px}
+.set-card{background:var(--paper);border-radius:var(--r);padding:18px}
+.set-card h3{margin:0 0 10px;font-weight:500;color:var(--mute)}
+.set-card p{margin:0 0 12px;font-size:15px}
+.set-card input:not([type=checkbox]){display:block;width:100%;max-width:340px;height:46px;border-radius:12px;border:1px solid var(--grey-3);background:var(--paper);padding:0 14px;font-size:16px;margin-bottom:8px;outline:none}
+.set-card input:focus{border-color:var(--ink)}
+.set-card .msg{font-size:14px;color:var(--mute);margin-left:8px}
+.set-card .qr{width:180px;height:180px;background:#fff;border-radius:12px;padding:8px;margin:4px 0 8px}
+.set-card a{color:var(--pista-deep)}
+
 @media (max-width:520px){
   .yr-num{font-size:44px}
   .nav{position:static;margin-top:16px}
@@ -281,7 +293,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 
 /* ── Zustand ───────────────────────── */
 const S = {
-  view: LS.get('view') || 'day',
+  view: ['day','week','year'].includes(LS.get('view')) ? LS.get('view') : 'day',
   date: today(),
   user: null,
   entries: {},   // 'YYYY-MM-DD' -> {text}
@@ -304,15 +316,60 @@ const ICON = {
   right: '<svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>'
 };
 
-/* ── Speicher-Links (privat, signiert) ───────────────────────── */
+/* ── Verschlüsselung (Ende-zu-Ende, im Gerät) ───────────────────────── */
+let KEY = null;            // AES-Schlüssel, nur im Speicher dieses Geräts
+const TE = new TextEncoder(), TD = new TextDecoder();
+const PBKDF2_ITER = 600000;
+const b64 = buf => { const b = new Uint8Array(buf); let x = ''; for (let i = 0; i < b.length; i += 0x8000) x += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(x); };
+const unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+async function deriveKey(pass, saltB64, iter){
+  const base = await crypto.subtle.importKey('raw', TE.encode(pass.normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: unb64(saltB64), iterations: iter, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function encBytes(bytes, key = KEY){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes);
+  const out = new Uint8Array(12 + ct.byteLength); out.set(iv); out.set(new Uint8Array(ct), 12); return out;
+}
+async function decBytes(buf, key = KEY){
+  const u = new Uint8Array(buf);
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, key, u.slice(12));
+}
+async function encText(t, key = KEY){ return t ? 'e1:' + b64(await encBytes(TE.encode(t), key)) : ''; }
+async function decText(t, key = KEY){
+  if (!t) return ''; if (!t.startsWith('e1:')) return t;
+  try { return TD.decode(await decBytes(unb64(t.slice(3)), key)); } catch(e){ return '⚠︎ nicht lesbar'; }
+}
+async function encBlob(blob){ return new Blob([await encBytes(await blob.arrayBuffer())], { type: 'application/octet-stream' }); }
+
+// Schlüssel auf diesem Gerät merken (nicht auslesbar gespeichert)
+function idb(){ return new Promise((res, rej) => { const r = indexedDB.open('fuenfjahre', 1); r.onupgradeneeded = () => r.result.createObjectStore('k'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function idbDo(mode, fn){ try { const db = await idb(); return await new Promise(res => { const st = db.transaction('k', mode).objectStore('k'); const rq = fn(st); rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null); }); } catch(e){ return null; } }
+const keyGet = () => idbDo('readonly', st => st.get('key_' + S.user.id));
+const keySet = k => idbDo('readwrite', st => st.put(k, 'key_' + S.user.id));
+const keyDel = () => idbDo('readwrite', st => st.delete('key_' + S.user.id));
+
+/* ── Dateien holen + entschlüsseln ───────────────────────── */
+const MIME = { m4a:'audio/mp4', mp4:'audio/mp4', aac:'audio/aac', webm:'audio/webm', ogg:'audio/ogg', mp3:'audio/mpeg', wav:'audio/wav', jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', heic:'image/heic', webp:'image/webp', gif:'image/gif' };
+const OBJ = {};
+function getObj(path){
+  if (OBJ[path]) return OBJ[path];
+  const pr = (async () => {
+    const { data, error } = await sb.storage.from(BUCKET).download(path);
+    if (error) throw error;
+    let buf = await data.arrayBuffer();
+    if (path.endsWith('.enc')) buf = await decBytes(buf);
+    const ext = path.replace(/\.enc$/, '').split('.').pop().toLowerCase();
+    return URL.createObjectURL(new Blob([buf], { type: MIME[ext] || '' }));
+  })();
+  OBJ[path] = pr; pr.catch(() => delete OBJ[path]);
+  return pr;
+}
 async function signed(paths){
-  paths = [...new Set(paths.filter(Boolean))];
-  const need = paths.filter(p => !S.urls[p] || S.urls[p].exp < Date.now());
-  if (need.length){
-    const { data } = await sb.storage.from(BUCKET).createSignedUrls(need, 60*60*6);
-    (data || []).forEach(o => { if (o.signedUrl) S.urls[o.path] = { url: o.signedUrl, exp: Date.now() + 5*3600e3 }; });
-  }
-  const out = {}; paths.forEach(p => out[p] = S.urls[p]?.url); return out;
+  const out = {};
+  await Promise.all([...new Set(paths.filter(Boolean))].map(async p => { try { out[p] = await getObj(p); } catch(e){} }));
+  return out;
 }
 
 /* ═══════════ START ═══════════ */
@@ -321,7 +378,7 @@ async function boot(){
   if (!SB_URL || !SB_KEY) return renderSetup();
   sb = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
   const { data: { session } } = await sb.auth.getSession();
-  sb.auth.onAuthStateChange((ev, s) => { if (ev === 'SIGNED_OUT'){ S.user = null; renderLogin(); } });
+  sb.auth.onAuthStateChange((ev, s) => { if (ev === 'SIGNED_OUT'){ S.user = null; KEY = null; renderLogin(); } });
   if (session){ S.user = session.user; start(); } else renderLogin();
 }
 
@@ -358,9 +415,94 @@ function renderLogin(){
   };
 }
 
-function start(){
+async function start(){
+  $('#tabbar').classList.add('hidden');
+  app.innerHTML = '<div class="loading"><span class="spin"></span></div>';
+  // a) Zwei-Faktor
+  const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') return renderMfa();
+  // b) Tagebuch-Schlüssel
+  if (!KEY){
+    const { data: v, error } = await sb.from('vault').select('*').maybeSingle();
+    if (error){ app.innerHTML = gateShell(`<p>Verbindung zur Datenbank klappt nicht: ${esc(error.message)}</p><p>Wurde <b>setup.sql</b> komplett ausgeführt?</p>`); return; }
+    if (!v) return renderVaultSetup();
+    S.vault = v;
+    const k = await keyGet();
+    if (k && await decText(v.check_value, k) === 'fuenf-jahre') KEY = k;
+    else return renderUnlock();
+  }
   $('#tabbar').classList.remove('hidden');
   render();
+}
+
+function renderMfa(){
+  app.innerHTML = gateShell(`
+    <form id="mf">
+      <p>Code aus deiner Authenticator-App (6 Ziffern).</p>
+      <label><span class="mono">Code</span><input id="mc" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required></label>
+      <button class="go" type="submit">Weiter</button>
+      <div class="err" id="merr"></div>
+      <p><button type="button" class="mono out" id="mout">Abmelden</button></p>
+    </form>`);
+  $('#mc').focus();
+  $('#mout').onclick = () => sb.auth.signOut();
+  $('#mf').onsubmit = async e => {
+    e.preventDefault(); $('#merr').textContent = '';
+    const { data: f } = await sb.auth.mfa.listFactors();
+    const totp = f?.totp?.[0];
+    if (!totp) return start();
+    const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: totp.id, code: $('#mc').value.trim() });
+    if (error){ $('#merr').textContent = 'Code stimmt nicht – nochmal versuchen.'; return; }
+    start();
+  };
+}
+
+function renderVaultSetup(){
+  app.innerHTML = gateShell(`
+    <form id="vf">
+      <p><b>Tagebuch-Schlüssel festlegen.</b> Damit wird alles auf deinem Gerät verschlüsselt, bevor es gespeichert wird. Ohne diesen Schlüssel kann niemand deine Einträge lesen – auch du nicht.</p>
+      <p><b>Aufschreiben und gut aufbewahren.</b> Vergessen = Einträge verloren.</p>
+      <label><span class="mono">Tagebuch-Schlüssel</span><input id="v1" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label><span class="mono">Nochmal</span><input id="v2" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label style="display:flex;gap:10px;align-items:center"><input id="vr" type="checkbox" checked style="width:auto;height:auto"><span>Auf diesem Gerät merken</span></label>
+      <button class="go" type="submit">Festlegen</button>
+      <div class="err" id="verr"></div>
+    </form>`);
+  $('#vf').onsubmit = async e => {
+    e.preventDefault();
+    const a = $('#v1').value, b = $('#v2').value;
+    if (a.length < 8) return $('#verr').textContent = 'Mindestens 8 Zeichen.';
+    if (a !== b) return $('#verr').textContent = 'Die beiden Eingaben sind nicht gleich.';
+    $('#verr').innerHTML = '<span class="spin"></span>';
+    const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+    const k = await deriveKey(a, salt, PBKDF2_ITER);
+    const check_value = await encText('fuenf-jahre', k);
+    const { data, error } = await sb.from('vault').insert({ user_id: S.user.id, salt, iterations: PBKDF2_ITER, check_value }).select().single();
+    if (error){ $('#verr').textContent = 'Fehler: ' + error.message; return; }
+    S.vault = data; KEY = k;
+    if ($('#vr').checked) await keySet(k);
+    start();
+  };
+}
+
+function renderUnlock(){
+  app.innerHTML = gateShell(`
+    <form id="uf">
+      <label><span class="mono">Tagebuch-Schlüssel</span><input id="u1" type="password" autocomplete="off" required></label>
+      <label style="display:flex;gap:10px;align-items:center"><input id="ur" type="checkbox" checked style="width:auto;height:auto"><span>Auf diesem Gerät merken</span></label>
+      <button class="go" type="submit">Aufschliessen</button>
+      <div class="err" id="uerr"></div>
+      <p><button type="button" class="mono out" id="uout">Abmelden</button></p>
+    </form>`);
+  $('#uout').onclick = () => sb.auth.signOut();
+  $('#uf').onsubmit = async e => {
+    e.preventDefault(); $('#uerr').innerHTML = '<span class="spin"></span>';
+    const k = await deriveKey($('#u1').value, S.vault.salt, S.vault.iterations);
+    if (await decText(S.vault.check_value, k) !== 'fuenf-jahre'){ $('#uerr').textContent = 'Falscher Schlüssel.'; return; }
+    KEY = k;
+    if ($('#ur').checked) await keySet(k); else await keyDel();
+    start();
+  };
 }
 
 /* ═══════════ RENDER ═══════════ */
@@ -370,7 +512,7 @@ function shellTop(){
   const ys = cycleYears(S.date.getFullYear());
   return `<div class="top">
       <div class="brand"><span class="s">fünf Jahre</span><span class="mono m">${ys[0]}—${ys[4]}</span></div>
-      <button class="mono out" id="logout">Abmelden</button>
+      <button class="mono out" id="settingsBtn">Einstellungen</button>
     </div>`;
 }
 
@@ -379,11 +521,12 @@ async function render(){
   if (REC) REC.mr.stop(); // laufende Aufnahme wird gespeichert
   if (S.view === 'week') return renderWeek();
   if (S.view === 'year') return renderYear();
+  if (S.view === 'settings') return renderSettings();
   return renderDay();
 }
 
 function bindTop(){
-  $('#logout').onclick = async () => { if (confirm('Abmelden?')) await sb.auth.signOut(); };
+  $('#settingsBtn').onclick = () => { S.view = 'settings'; render(); window.scrollTo(0,0); };
   const p = $('#prev'), n = $('#next'), t = $('#tdy');
   if (p) p.onclick = () => step(-1);
   if (n) n.onclick = () => step(1);
@@ -417,7 +560,7 @@ async function loadDay(){
   const err = e.error || v.error || w.error;
   if (err) { toast('Laden fehlgeschlagen: ' + err.message, 5000); }
   dates.forEach(d => { S.entries[d] = { text: '' }; S.voices[d] = []; });
-  (e.data||[]).forEach(r => S.entries[r.entry_date] = { text: r.text || '' });
+  await Promise.all((e.data||[]).map(async r => S.entries[r.entry_date] = { text: await decText(r.text || '') }));
   (v.data||[]).forEach(r => (S.voices[r.entry_date] ||= []).push(r));
   (w.data||[]).forEach(r => S.weeks[wkKey(r.iso_year, r.iso_week)] = r);
   return { years, dates };
@@ -509,7 +652,7 @@ function bindDay(){
 async function saveText(key, text, card){
   delete saveTimers[key];
   const { error } = await sb.from('entries').upsert(
-    { user_id: S.user.id, entry_date: key, text, updated_at: new Date().toISOString() },
+    { user_id: S.user.id, entry_date: key, text: await encText(text), updated_at: new Date().toISOString() },
     { onConflict: 'user_id,entry_date' });
   if (error) return toast('Nicht gespeichert: ' + error.message, 5000);
   const s = card && $('.saved', card);
@@ -634,8 +777,8 @@ function pickAudio(date){
 }
 
 async function saveVoice(date, blob, dur, ext){
-  const path = `${S.user.id}/voice/${date}_${Date.now()}.${ext}`;
-  const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'audio/mpeg', upsert: false });
+  const path = `${S.user.id}/voice/${date}_${Date.now()}.${ext}.enc`;
+  const up = await sb.storage.from(BUCKET).upload(path, await encBlob(blob), { contentType: 'application/octet-stream', upsert: false });
   if (up.error) return toast('Upload fehlgeschlagen: ' + up.error.message, 5000);
   const { data, error } = await sb.from('voice_notes')
     .insert({ user_id: S.user.id, entry_date: date, path, duration: Math.round(dur) }).select().single();
@@ -669,8 +812,8 @@ function pickImage(wy, ww){
     const f = inp.files[0]; if (!f) return;
     closeLb(); toast('Bild wird hochgeladen …', 10000);
     const { blob, ext } = await compressImage(f);
-    const path = `${S.user.id}/week/${wy}-W${pad(ww)}_${Date.now()}.${ext}`;
-    const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'image/jpeg' });
+    const path = `${S.user.id}/week/${wy}-W${pad(ww)}_${Date.now()}.${ext}.enc`;
+    const up = await sb.storage.from(BUCKET).upload(path, await encBlob(blob), { contentType: 'application/octet-stream' });
     if (up.error) return toast('Upload fehlgeschlagen: ' + up.error.message, 5000);
     const old = S.weeks[wkKey(wy, ww)];
     const { data, error } = await sb.from('week_images')
@@ -805,10 +948,91 @@ async function renderYear(){
   $$('.cal-row button[data-k]').forEach(b => b.onclick = () => { S.date = parse(b.dataset.k); S.view = 'day'; LS.set('view','day'); render(); window.scrollTo(0,0); });
 }
 
+/* ─────────── EINSTELLUNGEN ─────────── */
+async function renderSettings(){
+  $$('#tabbar button').forEach(b => b.classList.remove('on'));
+  app.innerHTML = `${shellTop()}
+    <header class="hero"><div class="big"><span class="scr" style="transform:none;margin:0">Einstellungen</span></div></header>
+    <section class="set">
+      <div class="set-card">
+        <h3 class="mono">Login-Passwort ändern</h3>
+        <form id="pwf">
+          <input id="pw1" type="password" autocomplete="new-password" placeholder="Neues Passwort" minlength="8" required>
+          <input id="pw2" type="password" autocomplete="new-password" placeholder="Nochmal" minlength="8" required>
+          <button class="pill" type="submit">Speichern</button> <span class="msg" id="pwm"></span>
+        </form>
+      </div>
+      <div class="set-card" id="mfaCard"><h3 class="mono">Zwei-Faktor-Anmeldung</h3><div class="loading"><span class="spin"></span></div></div>
+      <div class="set-card">
+        <h3 class="mono">Verschlüsselung</h3>
+        <p>Aktiv. Texte, Sprachnotizen und Wochenbilder werden auf diesem Gerät verschlüsselt, bevor sie gespeichert werden.</p>
+        <button class="pill ghost" id="lockBtn">Auf diesem Gerät sperren</button>
+      </div>
+      <div class="set-card">
+        <h3 class="mono">Konto</h3>
+        <p>${esc(S.user.email || '')}</p>
+        <button class="pill" id="outBtn">Abmelden</button>
+      </div>
+    </section>`;
+  $('#settingsBtn').onclick = () => { S.view = 'day'; render(); };
+  $('#settingsBtn').textContent = 'Zurück';
+  $('#outBtn').onclick = async () => { if (confirm('Abmelden?')){ await keyDel(); await sb.auth.signOut(); } };
+  $('#lockBtn').onclick = async () => { await keyDel(); KEY = null; S.view = 'day'; Object.keys(OBJ).forEach(k => delete OBJ[k]); start(); };
+  $('#pwf').onsubmit = async e => {
+    e.preventDefault();
+    const a = $('#pw1').value, b = $('#pw2').value, m = $('#pwm');
+    if (a !== b){ m.textContent = 'Nicht gleich.'; return; }
+    m.innerHTML = '<span class="spin"></span>';
+    const { error } = await sb.auth.updateUser({ password: a });
+    m.textContent = error ? 'Fehler: ' + error.message : 'Gespeichert ✓';
+    if (!error) e.target.reset();
+  };
+  renderMfaCard();
+}
+
+async function renderMfaCard(){
+  const card = $('#mfaCard'); if (!card) return;
+  const { data } = await sb.auth.mfa.listFactors();
+  const active = data?.totp?.[0];
+  if (active){
+    card.innerHTML = `<h3 class="mono">Zwei-Faktor-Anmeldung</h3><p><b>Aktiv.</b> Beim Login auf einem neuen Gerät brauchst du den Code aus deiner Authenticator-App.</p>
+      <button class="pill ghost" id="mfaOff">Ausschalten</button>`;
+    $('#mfaOff').onclick = async () => {
+      if (!confirm('Zwei-Faktor-Anmeldung wirklich ausschalten?')) return;
+      const { error } = await sb.auth.mfa.unenroll({ factorId: active.id });
+      if (error) return toast('Fehler: ' + error.message, 5000);
+      await sb.auth.refreshSession(); renderMfaCard();
+    };
+    return;
+  }
+  card.innerHTML = `<h3 class="mono">Zwei-Faktor-Anmeldung</h3><p>Aus. Mit Zwei-Faktor braucht ein Login zusätzlich einen 6-stelligen Code von deinem iPhone.</p>
+    <button class="pill" id="mfaOn">Einrichten</button>`;
+  $('#mfaOn').onclick = async () => {
+    // halbfertige Versuche aufräumen
+    for (const f of (data?.all || [])) if (f.status !== 'verified') await sb.auth.mfa.unenroll({ factorId: f.id });
+    const { data: en, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Fünf Jahre ' + new Date().toISOString().slice(0,16) });
+    if (error) return toast('Fehler: ' + error.message, 5000);
+    card.innerHTML = `<h3 class="mono">Zwei-Faktor einrichten</h3>
+      <p><b>1.</b> Am Computer: Diesen QR-Code mit der iPhone-Kamera scannen → «Bestätigungscode zu Passwörter hinzufügen».<br>
+      Am iPhone selbst: <a href="${esc(en.totp.uri)}">hier tippen</a>.</p>
+      <img class="qr" src="${en.totp.qr_code}" alt="QR-Code">
+      <p class="mono" style="word-break:break-all;color:var(--mute)">${esc(en.totp.secret)}</p>
+      <p><b>2.</b> Den 6-stelligen Code eingeben, den das iPhone jetzt anzeigt:</p>
+      <form id="mfv"><input id="mfc" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" required>
+      <button class="pill" type="submit">Bestätigen</button> <span class="msg" id="mfm"></span></form>`;
+    $('#mfv').onsubmit = async e => {
+      e.preventDefault(); $('#mfm').innerHTML = '<span class="spin"></span>';
+      const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: en.id, code: $('#mfc').value.trim() });
+      if (error){ $('#mfm').textContent = 'Code stimmt nicht.'; return; }
+      toast('Zwei-Faktor ist aktiv'); renderMfaCard();
+    };
+  };
+}
+
 /* ── Tabs, Tastatur, Wischen ───────────────────────── */
 $$('#tabbar button').forEach(b => b.onclick = () => { S.view = b.dataset.v; LS.set('view', S.view); render(); window.scrollTo(0,0); });
 document.addEventListener('keydown', e => {
-  if (!S.user || /INPUT|TEXTAREA/.test(document.activeElement?.tagName)) return;
+  if (!S.user || !KEY || S.view === 'settings' || /INPUT|TEXTAREA/.test(document.activeElement?.tagName)) return;
   if (e.key === 'Escape') closeLb();
   if ($('.lb')) return;
   if (e.key === 'ArrowLeft') step(-1);
@@ -820,7 +1044,7 @@ document.addEventListener('touchstart', e => {
   tx = e.touches[0].clientX; ty = e.touches[0].clientY;
 }, { passive: true });
 document.addEventListener('touchend', e => {
-  if (tx === null || !S.user) return;
+  if (tx === null || !S.user || !KEY || S.view === 'settings') return;
   const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
   tx = null;
   if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.8) step(dx < 0 ? 1 : -1);
