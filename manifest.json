@@ -1,0 +1,12 @@
+{
+  "name": "Fünf Jahre",
+  "short_name": "Fünf Jahre",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#E3E4E0",
+  "theme_color": "#E3E4E0",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

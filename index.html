@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fünf Jahre</title>
+<meta name="theme-color" content="#E3E4E0">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Fünf Jahre">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@300;500;800;900&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&family=Mrs+Saint+Delafield&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --grey:#E3E4E0;
+  --grey-2:#D3D4CF;
+  --grey-3:#B9BAB4;
+  --paper:#FAFAF7;
+  --ink:#121212;
+  --mute:#7B7C77;
+  --pista:#93C572;
+  --pista-deep:#5E8C43;
+  --pista-soft:#DDEBD0;
+  --line:rgba(18,18,18,.14);
+  --script:"Mrs Saint Delafield", cursive;
+  --display:"Big Shoulders Display", "Arial Narrow", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+  --sans:"Instrument Sans", system-ui, sans-serif;
+  --r:18px;
+  --safe-b:env(safe-area-inset-bottom, 0px);
+  --safe-t:env(safe-area-inset-top, 0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--grey);color:var(--ink)}
+body{
+  font-family:var(--sans);font-size:16px;line-height:1.5;min-height:100vh;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+/* weicher Schleier + Korn = "dreamy" */
+body::before{
+  content:"";position:fixed;inset:-20% -20% auto auto;width:70vmax;height:70vmax;z-index:0;pointer-events:none;
+  background:radial-gradient(closest-side, rgba(147,197,114,.38), rgba(147,197,114,0));
+  filter:blur(30px);
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.35;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .18 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+.wrap{position:relative;z-index:1;max-width:760px;margin:0 auto;padding:calc(18px + var(--safe-t)) 16px calc(110px + var(--safe-b))}
+.mono{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.hidden{display:none!important}
+
+/* ── Kopf ───────────────────────── */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand .s{font-family:var(--script);font-size:38px;line-height:1;transform:translateY(6px)}
+.brand .m{color:var(--mute)}
+.top .out{color:var(--mute);padding:6px 0}
+.top .out:hover{color:var(--ink)}
+
+.hero{position:relative;padding:26px 0 18px;border-bottom:1px solid var(--ink);margin-bottom:22px;user-select:none}
+.hero .big{display:flex;align-items:flex-end;gap:6px;flex-wrap:wrap;cursor:pointer}
+.hero .num{font-family:var(--display);font-weight:900;font-size:clamp(92px,24vw,150px);line-height:.78;letter-spacing:-.02em}
+.hero .scr{font-family:var(--script);font-size:clamp(58px,15vw,96px);line-height:.6;margin-left:-4px;transform:translateY(-8px)}
+.hero .sub{margin-top:16px;display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--mute)}
+.hero .sub b{color:var(--ink);font-weight:500}
+.nav{position:absolute;right:0;top:22px;display:flex;gap:6px}
+.nav button{width:42px;height:42px;border-radius:50%;border:1px solid var(--ink);display:grid;place-items:center;background:var(--paper);transition:background .15s}
+.nav button:hover{background:var(--pista)}
+.nav .today{width:auto;padding:0 14px;border-radius:21px}
+.nav svg{width:16px;height:16px}
+#datePick{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;left:0;bottom:0}
+
+/* ── Jahr-Karten (Tag) ───────────────────────── */
+.yr{position:relative;background:var(--paper);border-radius:var(--r);padding:18px 18px 16px;margin-bottom:14px;border:1px solid transparent;transition:border-color .2s}
+.yr.is-cur{border-color:var(--ink);box-shadow:0 1px 0 var(--ink)}
+.yr-head{display:flex;align-items:flex-start;gap:14px}
+.yr-num{font-family:var(--display);font-weight:800;font-size:54px;line-height:.82;letter-spacing:.01em;color:transparent;-webkit-text-stroke:1.2px var(--ink)}
+.yr.is-cur .yr-num{color:var(--ink);-webkit-text-stroke:0}
+.yr-meta{display:flex;flex-direction:column;gap:2px;padding-top:4px;color:var(--mute);flex:1;min-width:0}
+.yr-meta .tag{color:var(--ink)}
+.yr-meta .saved{color:var(--pista-deep);opacity:0;transition:opacity .3s}
+.yr-meta .saved.on{opacity:1}
+.wk-thumb{flex:none;width:64px;height:64px;border-radius:12px;overflow:hidden;position:relative;border:1px dashed var(--grey-3);display:grid;place-items:center;color:var(--mute);background:var(--grey)}
+.wk-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.wk-thumb.has{border:0}
+.wk-thumb .k{font-family:var(--mono);font-size:9px;letter-spacing:.1em;line-height:1.25;text-align:center}
+.wk-thumb .k b{display:block;font-size:16px;font-weight:400;letter-spacing:0}
+.wk-thumb:hover{border-color:var(--ink);color:var(--ink)}
+.yr-text{display:block;width:100%;margin-top:14px;border:0;border-top:1px solid var(--line);background:transparent;resize:none;outline:none;padding:12px 0 4px;min-height:72px;font-size:17px;line-height:1.55;overflow:hidden}
+.yr-text::placeholder{color:var(--grey-3);font-family:var(--script);font-size:30px}
+.yr.is-future{background:transparent;border:1px dashed var(--grey-3)}
+.yr.is-future .yr-num{-webkit-text-stroke-color:var(--grey-3)}
+.yr .later{margin-top:10px;font-family:var(--script);font-size:30px;color:var(--grey-3);line-height:1.2}
+.yr-actions{display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 15px;border-radius:19px;border:1px solid var(--ink);font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;background:transparent;transition:background .15s,color .15s}
+.pill:hover{background:var(--ink);color:var(--paper)}
+.pill.ghost{border-color:var(--grey-3);color:var(--mute)}
+.pill.ghost:hover{background:var(--grey);color:var(--ink)}
+.pill .dot{width:9px;height:9px;border-radius:50%;background:var(--pista);box-shadow:0 0 0 1px var(--ink)}
+.pill.rec-on{background:var(--pista);border-color:var(--pista);color:var(--ink)}
+.pill.rec-on .dot{background:#d23b2a;box-shadow:none;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+
+/* Sprachnotizen */
+.voices{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.vn{display:flex;align-items:center;gap:12px;padding:8px 10px 8px 8px;border-radius:30px;background:var(--grey)}
+.vn-play{flex:none;width:36px;height:36px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center}
+.vn-play svg{width:13px;height:13px}
+.vn.playing .vn-play{background:var(--pista);color:var(--ink)}
+.vn-bars{flex:1;display:flex;align-items:center;gap:2px;height:28px;min-width:0;cursor:pointer}
+.vn-bars i{flex:1;max-width:5px;border-radius:2px;background:var(--grey-3);transition:background .1s}
+.vn-bars i.on{background:var(--pista-deep)}
+.vn-time{font-family:var(--mono);font-size:11px;min-width:34px;text-align:right}
+.vn-at{font-family:var(--mono);font-size:10px;color:var(--mute);letter-spacing:.08em}
+.vn-del{width:26px;height:26px;border-radius:50%;color:var(--mute);display:grid;place-items:center;font-size:18px;line-height:1}
+.vn-del:hover{background:var(--paper);color:var(--ink)}
+
+/* ── Woche ───────────────────────── */
+.strip{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:34px}
+.tile{position:relative;aspect-ratio:4/5;border-radius:14px;overflow:hidden;background:var(--paper);display:flex;flex-direction:column;justify-content:flex-end;border:1px solid transparent}
+.tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tile .lab{position:relative;padding:8px;font-family:var(--display);font-weight:800;font-size:22px;line-height:.9}
+.tile.has .lab{color:var(--paper);text-shadow:0 1px 8px rgba(0,0,0,.35)}
+.tile .lab small{display:block;font-family:var(--mono);font-weight:400;font-size:9px;letter-spacing:.12em;margin-top:3px}
+.tile .plus{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--script);font-size:34px;color:var(--grey-3)}
+.tile.is-future{background:transparent;border:1px dashed var(--grey-3)}
+.tile.is-cur{border-color:var(--ink)}
+.tile:not(.is-future):hover{border-color:var(--ink)}
+.sect{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;gap:10px}
+.sect h2{margin:0;font-family:var(--script);font-weight:400;font-size:44px;line-height:1}
+.sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.sheet button{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--paper);font-family:var(--mono);font-size:10px;color:var(--mute);border:1px solid transparent}
+.sheet button img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.sheet button span{position:absolute;left:5px;top:4px}
+.sheet button.has span{color:var(--paper);text-shadow:0 1px 4px rgba(0,0,0,.5)}
+.sheet button.sel{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.sheet button.fut{background:transparent;border:1px dashed var(--grey-2)}
+
+/* ── Jahr ───────────────────────── */
+.ytabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}
+.ytabs button{font-family:var(--display);font-weight:800;font-size:22px;padding:6px 14px 4px;border-radius:22px;border:1px solid var(--grey-3);color:var(--mute)}
+.ytabs button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px}
+.stat{background:var(--paper);border-radius:14px;padding:12px 14px}
+.stat b{display:block;font-family:var(--display);font-weight:800;font-size:40px;line-height:.9}
+.stat span{color:var(--mute)}
+.cal{background:var(--paper);border-radius:var(--r);padding:16px 14px}
+.cal-row{display:grid;grid-template-columns:34px repeat(31,1fr);gap:3px;align-items:center;margin-bottom:5px}
+.cal-row .ml{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--mute)}
+.cal-row button{aspect-ratio:1;border-radius:50%;background:var(--grey-2);min-width:0}
+.cal-row button.t{background:var(--ink)}
+.cal-row button.v{background:var(--pista)}
+.cal-row button.t.v{background:var(--pista);box-shadow:inset 0 0 0 2px var(--ink)}
+.cal-row button.f{background:transparent;box-shadow:inset 0 0 0 1px var(--grey-2)}
+.cal-row button.today{outline:1.5px solid var(--ink);outline-offset:1.5px}
+.cal-row .x{visibility:hidden}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;color:var(--mute)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+
+/* ── Tabbar ───────────────────────── */
+.tabbar{position:fixed;z-index:20;left:50%;transform:translateX(-50%);bottom:calc(14px + var(--safe-b));display:flex;gap:4px;padding:5px;border-radius:30px;background:rgba(18,18,18,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.tabbar button{height:44px;padding:0 20px;border-radius:22px;color:#cfd0cb;font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+.tabbar button.on{background:var(--pista);color:var(--ink)}
+
+/* ── Login / Setup ───────────────────────── */
+.gate{min-height:calc(100vh - 140px);display:flex;flex-direction:column;justify-content:center;max-width:420px;margin:0 auto}
+.gate .s{font-family:var(--script);font-size:86px;line-height:.9}
+.gate .d{font-family:var(--display);font-weight:300;font-size:22px;letter-spacing:.3em;text-transform:uppercase;margin:6px 0 34px;color:var(--mute)}
+.gate label{display:block;margin:0 0 14px}
+.gate label .mono{display:block;margin-bottom:6px;color:var(--mute)}
+.gate input{width:100%;height:50px;border-radius:14px;border:1px solid var(--grey-3);background:var(--paper);padding:0 16px;font-size:16px;outline:none}
+.gate input:focus{border-color:var(--ink)}
+.gate .go{margin-top:8px;width:100%;height:52px;border-radius:26px;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase}
+.gate .go:hover{background:var(--pista);color:var(--ink)}
+.gate .err{color:#b3321f;min-height:22px;margin-top:10px;font-size:14px}
+.gate p{color:var(--mute);font-size:14px}
+
+/* ── Lightbox + Toast ───────────────────────── */
+.lb{position:fixed;inset:0;z-index:50;background:rgba(227,228,224,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(20px + var(--safe-t)) 16px calc(20px + var(--safe-b))}
+.lb img{max-width:100%;max-height:68vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+.lb .cap{margin:16px 0 14px;display:flex;align-items:baseline;gap:10px}
+.lb .cap .scr{font-family:var(--script);font-size:40px;line-height:1}
+.lb .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.toast{position:fixed;z-index:60;left:50%;transform:translateX(-50%);bottom:calc(84px + var(--safe-b));background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:20px;font-size:14px;max-width:calc(100% - 32px);opacity:0;pointer-events:none;transition:opacity .25s}
+.toast.on{opacity:1}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--grey-3);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loading{padding:40px 0;text-align:center;color:var(--mute)}
+
+@media (max-width:520px){
+  .yr-num{font-size:44px}
+  .nav{position:static;margin-top:16px}
+  .strip{gap:5px}
+  .tile .lab{font-size:17px;padding:6px}
+  .tile .lab small{font-size:8px;letter-spacing:.06em}
+  .cal{padding:12px 8px}
+  .cal-row{grid-template-columns:26px repeat(31,1fr);gap:2px}
+  .stat b{font-size:32px}
+  .vn-at{display:none}
+  .ytabs{flex-wrap:nowrap;gap:4px}
+  .ytabs button{flex:1;font-size:17px;padding:6px 0 4px}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="loading"><span class="spin"></span></div></div>
+<nav class="tabbar hidden" id="tabbar">
+  <button data-v="day">Tag</button>
+  <button data-v="week">Woche</button>
+  <button data-v="year">Jahr</button>
+</nav>
+<input type="date" id="datePick">
+<input type="file" id="imgPick" accept="image/*" class="hidden">
+<input type="file" id="audPick" accept="audio/*" class="hidden">
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   FÜNF JAHRE – ein 5-Jahres-Tagebuch
+   Daten: Supabase (Tabellen + privater Speicher)
+   ═══════════════════════════════════════════════ */
+const CFG = Object.assign({ START_YEAR: 2026 }, window.TAGEBUCH_CONFIG || {});
+const LS = {
+  get(k){ try { return localStorage.getItem('fj_' + k) || ''; } catch(e){ return ''; } },
+  set(k,v){ try { localStorage.setItem('fj_' + k, v); } catch(e){} },
+  del(k){ try { localStorage.removeItem('fj_' + k); } catch(e){} }
+};
+const SB_URL = (CFG.SUPABASE_URL || LS.get('url')).trim();
+const SB_KEY = (CFG.SUPABASE_ANON_KEY || LS.get('key')).trim();
+const BUCKET = 'tagebuch';
+let sb = null;
+
+/* ── Datum ───────────────────────── */
+const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const MSHORT = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+const WDAYS = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+const pad = n => String(n).padStart(2,'0');
+const ymd = (y,m,d) => `${y}-${pad(m)}-${pad(d)}`;
+const mk = (y,m,d) => new Date(y, m-1, d, 12);
+const dkey = dt => ymd(dt.getFullYear(), dt.getMonth()+1, dt.getDate());
+const parse = s => { const [y,m,d] = s.split('-').map(Number); return mk(y,m,d); };
+const isLeap = y => (y%4===0 && y%100!==0) || y%400===0;
+const today = () => { const n = new Date(); return mk(n.getFullYear(), n.getMonth()+1, n.getDate()); };
+const addDays = (dt,n) => { const d = new Date(dt); d.setDate(d.getDate()+n); return d; };
+const dayOfYear = dt => Math.round((dt - mk(dt.getFullYear(),1,1)) / 864e5) + 1;
+function isoWeek(dt){
+  const d = new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return { year: d.getUTCFullYear(), week: Math.ceil(((d - y0) / 864e5 + 1) / 7) };
+}
+function mondayOf(year, week){
+  const j4 = mk(year,1,4); const dow = j4.getDay() || 7;
+  return addDays(j4, -(dow-1) + (week-1)*7);
+}
+const weeksInYear = y => isoWeek(mk(y,12,28)).week;
+function cycleYears(y){
+  const s = CFG.START_YEAR + 5 * Math.floor((y - CFG.START_YEAR) / 5);
+  return [s, s+1, s+2, s+3, s+4];
+}
+// gleicher Kalendertag in Jahr y (29. Feb → null, wenn kein Schaltjahr)
+function sameDay(dt, y){
+  const m = dt.getMonth()+1, d = dt.getDate();
+  if (m===2 && d===29 && !isLeap(y)) return null;
+  return mk(y,m,d);
+}
+const fmtDur = s => { s = Math.max(0, Math.round(s||0)); return `${Math.floor(s/60)}:${pad(s%60)}`; };
+const wkKey = (y,w) => `${y}-${w}`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ── Zustand ───────────────────────── */
+const S = {
+  view: LS.get('view') || 'day',
+  date: today(),
+  user: null,
+  entries: {},   // 'YYYY-MM-DD' -> {text}
+  voices: {},    // 'YYYY-MM-DD' -> [{id,path,duration,created_at}]
+  weeks: {},     // 'YYYY-W' -> {id,path}
+  urls: {}       // path -> {url, exp}
+};
+const $ = (s, el=document) => el.querySelector(s);
+const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+const app = $('#app');
+
+function toast(msg, ms=2600){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), ms);
+}
+const ICON = {
+  play: '<svg viewBox="0 0 14 14"><path d="M3 1.5v11l9.5-5.5z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 14 14"><rect x="2.5" y="1.5" width="3" height="11" fill="currentColor"/><rect x="8.5" y="1.5" width="3" height="11" fill="currentColor"/></svg>',
+  left: '<svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  right: '<svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>'
+};
+
+/* ── Speicher-Links (privat, signiert) ───────────────────────── */
+async function signed(paths){
+  paths = [...new Set(paths.filter(Boolean))];
+  const need = paths.filter(p => !S.urls[p] || S.urls[p].exp < Date.now());
+  if (need.length){
+    const { data } = await sb.storage.from(BUCKET).createSignedUrls(need, 60*60*6);
+    (data || []).forEach(o => { if (o.signedUrl) S.urls[o.path] = { url: o.signedUrl, exp: Date.now() + 5*3600e3 }; });
+  }
+  const out = {}; paths.forEach(p => out[p] = S.urls[p]?.url); return out;
+}
+
+/* ═══════════ START ═══════════ */
+async function boot(){
+  if (!window.supabase){ app.innerHTML = gateShell('<p>Supabase konnte nicht geladen werden. Internetverbindung prüfen und neu laden.</p>'); return; }
+  if (!SB_URL || !SB_KEY) return renderSetup();
+  sb = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+  const { data: { session } } = await sb.auth.getSession();
+  sb.auth.onAuthStateChange((ev, s) => { if (ev === 'SIGNED_OUT'){ S.user = null; renderLogin(); } });
+  if (session){ S.user = session.user; start(); } else renderLogin();
+}
+
+function gateShell(inner){
+  return `<div class="gate"><div class="s">fünf Jahre</div><div class="d">Tagebuch</div>${inner}</div>`;
+}
+function renderSetup(){
+  $('#tabbar').classList.add('hidden');
+  app.innerHTML = gateShell(`
+    <p>Einmalig: Verbindung zu deinem Supabase-Projekt. (Oder die Werte direkt in <b>config.js</b> eintragen.)</p>
+    <label><span class="mono">Project URL</span><input id="su" placeholder="https://….supabase.co" autocomplete="off"></label>
+    <label><span class="mono">anon public key</span><input id="sk" placeholder="eyJ…" autocomplete="off"></label>
+    <button class="go" id="sgo">Verbinden</button>`);
+  $('#sgo').onclick = () => {
+    const u = $('#su').value.trim(), k = $('#sk').value.trim();
+    if (!u || !k) return;
+    LS.set('url', u); LS.set('key', k); location.reload();
+  };
+}
+function renderLogin(){
+  $('#tabbar').classList.add('hidden');
+  app.innerHTML = gateShell(`
+    <form id="lf">
+      <label><span class="mono">E-Mail</span><input id="le" type="email" autocomplete="username" required></label>
+      <label><span class="mono">Passwort</span><input id="lp" type="password" autocomplete="current-password" required></label>
+      <button class="go" type="submit">Öffnen</button>
+      <div class="err" id="lerr"></div>
+    </form>`);
+  $('#lf').onsubmit = async e => {
+    e.preventDefault(); $('#lerr').textContent = '';
+    const { data, error } = await sb.auth.signInWithPassword({ email: $('#le').value.trim(), password: $('#lp').value });
+    if (error){ $('#lerr').textContent = 'Das hat nicht geklappt – E-Mail oder Passwort prüfen.'; return; }
+    S.user = data.user; start();
+  };
+}
+
+function start(){
+  $('#tabbar').classList.remove('hidden');
+  render();
+}
+
+/* ═══════════ RENDER ═══════════ */
+function setTabs(){ $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view)); }
+
+function shellTop(){
+  const ys = cycleYears(S.date.getFullYear());
+  return `<div class="top">
+      <div class="brand"><span class="s">fünf Jahre</span><span class="mono m">${ys[0]}—${ys[4]}</span></div>
+      <button class="mono out" id="logout">Abmelden</button>
+    </div>`;
+}
+
+async function render(){
+  setTabs(); stopAudio();
+  if (REC) REC.mr.stop(); // laufende Aufnahme wird gespeichert
+  if (S.view === 'week') return renderWeek();
+  if (S.view === 'year') return renderYear();
+  return renderDay();
+}
+
+function bindTop(){
+  $('#logout').onclick = async () => { if (confirm('Abmelden?')) await sb.auth.signOut(); };
+  const p = $('#prev'), n = $('#next'), t = $('#tdy');
+  if (p) p.onclick = () => step(-1);
+  if (n) n.onclick = () => step(1);
+  if (t) t.onclick = () => { S.date = today(); render(); };
+  const big = $('.hero .big');
+  if (big) big.onclick = () => {
+    const dp = $('#datePick'); dp.value = dkey(S.date);
+    if (dp.showPicker) { try { dp.showPicker(); return; } catch(e){} }
+    dp.click();
+  };
+}
+$('#datePick').addEventListener('change', e => { if (e.target.value){ S.date = parse(e.target.value); render(); } });
+
+function step(dir){
+  if (S.view === 'day') S.date = addDays(S.date, dir);
+  else if (S.view === 'week') S.date = addDays(S.date, dir*7);
+  else S.date = mk(S.date.getFullYear()+dir, S.date.getMonth()+1, Math.min(S.date.getDate(), 28));
+  render();
+}
+
+/* ─────────── TAG ─────────── */
+async function loadDay(){
+  const years = cycleYears(S.date.getFullYear());
+  const dates = years.map(y => sameDay(S.date, y)).filter(Boolean).map(dkey);
+  const wy = [...new Set(years.flatMap(y => [y-1, y, y+1]))];
+  const [e, v, w] = await Promise.all([
+    sb.from('entries').select('entry_date,text').in('entry_date', dates),
+    sb.from('voice_notes').select('id,entry_date,path,duration,created_at').in('entry_date', dates).order('created_at'),
+    sb.from('week_images').select('id,iso_year,iso_week,path').in('iso_year', wy)
+  ]);
+  const err = e.error || v.error || w.error;
+  if (err) { toast('Laden fehlgeschlagen: ' + err.message, 5000); }
+  dates.forEach(d => { S.entries[d] = { text: '' }; S.voices[d] = []; });
+  (e.data||[]).forEach(r => S.entries[r.entry_date] = { text: r.text || '' });
+  (v.data||[]).forEach(r => (S.voices[r.entry_date] ||= []).push(r));
+  (w.data||[]).forEach(r => S.weeks[wkKey(r.iso_year, r.iso_week)] = r);
+  return { years, dates };
+}
+
+async function renderDay(){
+  const dt = S.date, tdy = today();
+  const m = dt.getMonth()+1, d = dt.getDate();
+  const wk = isoWeek(dt);
+  app.innerHTML = `${shellTop()}
+    <header class="hero">
+      <div class="big" title="Datum wählen"><span class="num">${d}</span><span class="scr">${MONTHS[m-1]}</span></div>
+      <div class="sub mono"><b>${WDAYS[dt.getDay()]}</b><span>KW ${wk.week}</span><span>Tag ${dayOfYear(dt)}</span></div>
+      <div class="nav"><button id="prev" aria-label="Vortag">${ICON.left}</button><button class="today mono" id="tdy">Heute</button><button id="next" aria-label="Nächster Tag">${ICON.right}</button></div>
+    </header>
+    <section id="cards"><div class="loading"><span class="spin"></span></div></section>`;
+  bindTop();
+  const myDate = dkey(dt);
+  const { years } = await loadDay();
+  if (dkey(S.date) !== myDate || S.view !== 'day') return; // inzwischen weitergeklickt
+
+  const wkPaths = years.map(y => { const sd = sameDay(dt, y) || mk(y,2,28); const w = isoWeek(sd); return S.weeks[wkKey(w.year,w.week)]?.path; });
+  const urls = await signed(wkPaths);
+
+  $('#cards').innerHTML = years.map(y => {
+    const sd = sameDay(dt, y);
+    if (!sd) return `<article class="yr is-future"><div class="yr-head"><div class="yr-num">${y}</div><div class="yr-meta mono"><span>kein 29. Februar</span></div></div></article>`;
+    const key = dkey(sd), future = sd > tdy, cur = y === dt.getFullYear();
+    const w = isoWeek(sd), wrec = S.weeks[wkKey(w.year, w.week)], wurl = wrec && urls[wrec.path];
+    if (future) return `<article class="yr is-future ${cur?'is-cur':''}">
+        <div class="yr-head"><div class="yr-num">${y}</div><div class="yr-meta mono"><span>${WDAYS[sd.getDay()]}</span><span>KW ${w.week}</span></div></div>
+        <div class="later">noch nicht …</div></article>`;
+    return `<article class="yr ${cur?'is-cur':''}" data-date="${key}">
+      <div class="yr-head">
+        <div class="yr-num">${y}</div>
+        <div class="yr-meta mono"><span class="tag">${WDAYS[sd.getDay()]}</span><span>KW ${w.week}</span><span class="saved">gespeichert</span></div>
+        <button class="wk-thumb ${wurl?'has':''}" data-wy="${w.year}" data-ww="${w.week}" title="Wochenbild KW ${w.week}">
+          ${wurl ? `<img src="${esc(wurl)}" alt="">` : `<span class="k">Bild<b>+</b>KW ${w.week}</span>`}
+        </button>
+      </div>
+      <textarea class="yr-text" rows="2" placeholder="Was war heute?">${esc(S.entries[key]?.text)}</textarea>
+      <div class="voices">${(S.voices[key]||[]).map(voiceRow).join('')}</div>
+      <div class="yr-actions">
+        <button class="pill rec" data-date="${key}"><span class="dot"></span><span class="lbl">Sprachnotiz</span></button>
+        <button class="pill ghost upa" data-date="${key}">Audio-Datei</button>
+      </div>
+    </article>`;
+  }).join('');
+  bindDay();
+}
+
+function bars(id, n=34){
+  let h = 0; for (const c of String(id)) h = (h*31 + c.charCodeAt(0)) >>> 0;
+  let out = '';
+  for (let i=0;i<n;i++){ h = (h*1103515245 + 12345) >>> 0; const v = 25 + (h % 75); out += `<i style="height:${v}%"></i>`; }
+  return out;
+}
+function voiceRow(v){
+  const at = v.created_at ? new Date(v.created_at) : null;
+  return `<div class="vn" data-id="${v.id}" data-path="${esc(v.path)}" data-dur="${v.duration||0}">
+    <button class="vn-play" aria-label="Abspielen">${ICON.play}</button>
+    <div class="vn-bars">${bars(v.id)}</div>
+    <span class="vn-time">${fmtDur(v.duration)}</span>
+    ${at ? `<span class="vn-at">${pad(at.getHours())}:${pad(at.getMinutes())}</span>` : ''}
+    <button class="vn-del" aria-label="Löschen" title="Löschen">×</button>
+  </div>`;
+}
+
+const saveTimers = {};
+function autosize(t){ t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+function bindDay(){
+  $$('.yr[data-date]').forEach(card => {
+    const key = card.dataset.date, ta = $('.yr-text', card);
+    autosize(ta);
+    ta.addEventListener('input', () => {
+      autosize(ta);
+      S.entries[key] = { text: ta.value };
+      clearTimeout(saveTimers[key]);
+      saveTimers[key] = setTimeout(() => saveText(key, ta.value, card), 700);
+    });
+    ta.addEventListener('blur', () => { if (saveTimers[key]){ clearTimeout(saveTimers[key]); saveText(key, ta.value, card); } });
+  });
+  $$('.wk-thumb').forEach(b => b.onclick = () => openWeekImage(+b.dataset.wy, +b.dataset.ww));
+  $$('.rec').forEach(b => b.onclick = () => toggleRec(b.dataset.date));
+  $$('.upa').forEach(b => b.onclick = () => pickAudio(b.dataset.date));
+  bindVoices(app);
+}
+
+async function saveText(key, text, card){
+  delete saveTimers[key];
+  const { error } = await sb.from('entries').upsert(
+    { user_id: S.user.id, entry_date: key, text, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id,entry_date' });
+  if (error) return toast('Nicht gespeichert: ' + error.message, 5000);
+  const s = card && $('.saved', card);
+  if (s){ s.classList.add('on'); clearTimeout(s._t); s._t = setTimeout(() => s.classList.remove('on'), 1400); }
+}
+// beim Verlassen noch schnell speichern
+window.addEventListener('pagehide', () => {
+  Object.keys(saveTimers).forEach(k => { const c = $(`.yr[data-date="${k}"]`); if (c) saveText(k, $('.yr-text', c).value, c); });
+});
+
+/* ── Abspielen ───────────────────────── */
+const AUDIO = new Audio(); AUDIO.preload = 'none';
+let playingRow = null;
+function stopAudio(){ AUDIO.pause(); if (playingRow){ setRowState(playingRow, false); playingRow = null; } }
+function setRowState(row, on){
+  row.classList.toggle('playing', on);
+  $('.vn-play', row).innerHTML = on ? ICON.pause : ICON.play;
+  if (!on){ $$('.vn-bars i', row).forEach(i => i.classList.remove('on')); $('.vn-time', row).textContent = fmtDur(+row.dataset.dur); }
+}
+AUDIO.addEventListener('timeupdate', () => {
+  if (!playingRow) return;
+  const dur = isFinite(AUDIO.duration) && AUDIO.duration > 0 ? AUDIO.duration : (+playingRow.dataset.dur || 1);
+  const p = Math.min(1, AUDIO.currentTime / dur);
+  const bs = $$('.vn-bars i', playingRow), n = Math.round(p * bs.length);
+  bs.forEach((b,i) => b.classList.toggle('on', i < n));
+  $('.vn-time', playingRow).textContent = fmtDur(AUDIO.currentTime);
+});
+AUDIO.addEventListener('ended', stopAudio);
+AUDIO.addEventListener('error', () => { if (playingRow){ toast('Abspielen nicht möglich'); stopAudio(); } });
+
+function bindVoices(root){ bindRows($$('.vn', root)); }
+function bindRows(rows){
+  rows.forEach(row => {
+    $('.vn-play', row).onclick = async () => {
+      if (playingRow === row){ if (AUDIO.paused){ AUDIO.play(); setRowState(row, true); } else { AUDIO.pause(); row.classList.remove('playing'); $('.vn-play', row).innerHTML = ICON.play; } return; }
+      stopAudio();
+      playingRow = row; setRowState(row, true);
+      const u = (await signed([row.dataset.path]))[row.dataset.path];
+      if (playingRow !== row) return;
+      if (!u){ toast('Datei nicht gefunden'); return stopAudio(); }
+      AUDIO.src = u; AUDIO.play().catch(() => {});
+    };
+    $('.vn-bars', row).onclick = e => {
+      if (playingRow !== row || !isFinite(AUDIO.duration)) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      AUDIO.currentTime = AUDIO.duration * ((e.clientX - r.left) / r.width);
+    };
+    $('.vn-del', row).onclick = async () => {
+      if (!confirm('Diese Sprachnotiz löschen?')) return;
+      if (playingRow === row) stopAudio();
+      const id = row.dataset.id, path = row.dataset.path;
+      const { error } = await sb.from('voice_notes').delete().eq('id', id);
+      if (error) return toast('Löschen fehlgeschlagen: ' + error.message, 5000);
+      await sb.storage.from(BUCKET).remove([path]);
+      Object.keys(S.voices).forEach(k => S.voices[k] = S.voices[k].filter(v => String(v.id) !== String(id)));
+      row.remove();
+    };
+  });
+}
+
+/* ── Aufnehmen ───────────────────────── */
+let REC = null;
+function extFor(type, name){
+  if (name && /\.[a-z0-9]{2,4}$/i.test(name)) return name.split('.').pop().toLowerCase();
+  if (/mp4|m4a|aac/.test(type)) return 'm4a';
+  if (/ogg/.test(type)) return 'ogg';
+  if (/mpeg|mp3/.test(type)) return 'mp3';
+  if (/wav/.test(type)) return 'wav';
+  return 'webm';
+}
+async function toggleRec(date){
+  if (REC){ REC.mr.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder){ toast('Aufnehmen geht in diesem Browser nicht – nutze «Audio-Datei».', 4500); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch(e){ toast('Kein Zugriff aufs Mikrofon – bitte in den Einstellungen erlauben.', 4500); return; }
+  stopAudio();
+  const types = ['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'];
+  const mime = types.find(t => MediaRecorder.isTypeSupported?.(t)) || '';
+  const opts = mime ? { mimeType: mime, audioBitsPerSecond: 48000 } : undefined;
+  const mr = new MediaRecorder(stream, opts);
+  const chunks = [];
+  mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const t0 = Date.now();
+  mr.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    clearInterval(REC?.timer);
+    const btn = $(`.rec[data-date="${date}"]`);
+    if (btn){ btn.classList.remove('rec-on'); $('.lbl', btn).innerHTML = '<span class="spin"></span>'; }
+    REC = null;
+    const type = (mr.mimeType || mime || 'audio/webm').split(';')[0];
+    const blob = new Blob(chunks, { type });
+    const dur = (Date.now() - t0) / 1000;
+    if (dur < 0.8 || !blob.size){ if (btn) $('.lbl', btn).textContent = 'Sprachnotiz'; return; }
+    await saveVoice(date, blob, dur, extFor(type));
+    if (btn) $('.lbl', btn).textContent = 'Sprachnotiz';
+  };
+  mr.start(1000);
+  const btn = $(`.rec[data-date="${date}"]`);
+  btn.classList.add('rec-on');
+  const tick = () => { if (btn.isConnected) $('.lbl', btn).textContent = 'Stopp · ' + fmtDur((Date.now()-t0)/1000); };
+  tick();
+  REC = { mr, date, timer: setInterval(tick, 250) };
+}
+
+function pickAudio(date){
+  const inp = $('#audPick'); inp.value = '';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    toast('Wird hochgeladen …', 8000);
+    const dur = await new Promise(res => {
+      const a = new Audio(); const u = URL.createObjectURL(f);
+      const done = v => { URL.revokeObjectURL(u); res(v); };
+      a.onloadedmetadata = () => done(isFinite(a.duration) ? a.duration : 0);
+      a.onerror = () => done(0); setTimeout(() => done(0), 4000);
+      a.src = u;
+    });
+    await saveVoice(date, f, dur, extFor(f.type, f.name));
+    toast('Sprachnotiz gespeichert');
+  };
+  inp.click();
+}
+
+async function saveVoice(date, blob, dur, ext){
+  const path = `${S.user.id}/voice/${date}_${Date.now()}.${ext}`;
+  const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'audio/mpeg', upsert: false });
+  if (up.error) return toast('Upload fehlgeschlagen: ' + up.error.message, 5000);
+  const { data, error } = await sb.from('voice_notes')
+    .insert({ user_id: S.user.id, entry_date: date, path, duration: Math.round(dur) }).select().single();
+  if (error){ await sb.storage.from(BUCKET).remove([path]); return toast('Nicht gespeichert: ' + error.message, 5000); }
+  (S.voices[date] ||= []).push(data);
+  const card = $(`.yr[data-date="${date}"]`);
+  if (card){
+    const wrap = $('.voices', card);
+    wrap.insertAdjacentHTML('beforeend', voiceRow(data));
+    bindRows([wrap.lastElementChild]);
+  }
+}
+
+/* ── Wochenbild ───────────────────────── */
+async function compressImage(file, max=1600, q=.84){
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    URL.revokeObjectURL(url);
+    const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+    return blob ? { blob, ext: 'jpg' } : { blob: file, ext: extFor(file.type, file.name) };
+  } catch(e){ return { blob: file, ext: extFor(file.type, file.name) }; }
+}
+function pickImage(wy, ww){
+  const inp = $('#imgPick'); inp.value = '';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    closeLb(); toast('Bild wird hochgeladen …', 10000);
+    const { blob, ext } = await compressImage(f);
+    const path = `${S.user.id}/week/${wy}-W${pad(ww)}_${Date.now()}.${ext}`;
+    const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type || 'image/jpeg' });
+    if (up.error) return toast('Upload fehlgeschlagen: ' + up.error.message, 5000);
+    const old = S.weeks[wkKey(wy, ww)];
+    const { data, error } = await sb.from('week_images')
+      .upsert({ user_id: S.user.id, iso_year: wy, iso_week: ww, path }, { onConflict: 'user_id,iso_year,iso_week' }).select().single();
+    if (error){ await sb.storage.from(BUCKET).remove([path]); return toast('Nicht gespeichert: ' + error.message, 5000); }
+    if (old && old.path !== path) await sb.storage.from(BUCKET).remove([old.path]);
+    S.weeks[wkKey(wy, ww)] = data;
+    toast('Wochenbild gespeichert');
+    render();
+  };
+  inp.click();
+}
+async function openWeekImage(wy, ww){
+  const rec = S.weeks[wkKey(wy, ww)];
+  if (!rec) return pickImage(wy, ww);
+  const u = (await signed([rec.path]))[rec.path];
+  const mon = mondayOf(wy, ww), sun = addDays(mon, 6);
+  const lb = document.createElement('div'); lb.className = 'lb';
+  lb.innerHTML = `<img src="${esc(u)}" alt="">
+    <div class="cap"><span class="scr">Woche ${ww}</span><span class="mono">${mon.getDate()}. ${MSHORT[mon.getMonth()]} – ${sun.getDate()}. ${MSHORT[sun.getMonth()]} ${sun.getFullYear()}</span></div>
+    <div class="row"><button class="pill" id="lbr">Ersetzen</button><button class="pill ghost" id="lbd">Löschen</button><button class="pill ghost" id="lbc">Schliessen</button></div>`;
+  document.body.appendChild(lb);
+  lb.onclick = e => { if (e.target === lb) closeLb(); };
+  $('#lbc').onclick = closeLb;
+  $('#lbr').onclick = () => pickImage(wy, ww);
+  $('#lbd').onclick = async () => {
+    if (!confirm('Wochenbild löschen?')) return;
+    const { error } = await sb.from('week_images').delete().eq('id', rec.id);
+    if (error) return toast('Löschen fehlgeschlagen: ' + error.message, 5000);
+    await sb.storage.from(BUCKET).remove([rec.path]);
+    delete S.weeks[wkKey(wy, ww)]; closeLb(); render();
+  };
+}
+function closeLb(){ $$('.lb').forEach(x => x.remove()); }
+
+/* ─────────── WOCHE ─────────── */
+async function renderWeek(){
+  const dt = S.date, tdy = today(), wk = isoWeek(dt);
+  const mon = mondayOf(wk.year, wk.week), sun = addDays(mon, 6);
+  app.innerHTML = `${shellTop()}
+    <header class="hero">
+      <div class="big" title="Datum wählen"><span class="num">${wk.week}</span><span class="scr">Woche</span></div>
+      <div class="sub mono"><b>${mon.getDate()}. ${MSHORT[mon.getMonth()]} – ${sun.getDate()}. ${MSHORT[sun.getMonth()]}</b><span>${wk.year}</span></div>
+      <div class="nav"><button id="prev" aria-label="Vorwoche">${ICON.left}</button><button class="today mono" id="tdy">Heute</button><button id="next" aria-label="Nächste Woche">${ICON.right}</button></div>
+    </header>
+    <section id="wk"><div class="loading"><span class="spin"></span></div></section>`;
+  bindTop();
+  const myKey = dkey(dt);
+  const years = cycleYears(dt.getFullYear());
+  const { data, error } = await sb.from('week_images').select('id,iso_year,iso_week,path').in('iso_year', [...new Set(years.flatMap(y => [y-1,y,y+1]))]);
+  if (error) toast('Laden fehlgeschlagen: ' + error.message, 5000);
+  (data||[]).forEach(r => S.weeks[wkKey(r.iso_year, r.iso_week)] = r);
+  if (dkey(S.date) !== myKey || S.view !== 'week') return;
+
+  const strip = years.map(y => { const sd = sameDay(dt, y) || mk(y,2,28); const w = isoWeek(sd); return { y, w, sd }; });
+  const nW = weeksInYear(wk.year);
+  const sheetW = Array.from({ length: nW }, (_, i) => i+1);
+  const paths = [...strip.map(s => S.weeks[wkKey(s.w.year, s.w.week)]?.path), ...sheetW.map(w => S.weeks[wkKey(wk.year, w)]?.path)];
+  const urls = await signed(paths);
+  const curWk = isoWeek(tdy);
+
+  $('#wk').innerHTML = `
+    <div class="strip">${strip.map(({y, w, sd}) => {
+      const rec = S.weeks[wkKey(w.year, w.week)], u = rec && urls[rec.path];
+      const fut = mondayOf(w.year, w.week) > tdy;
+      return `<button class="tile ${u?'has':''} ${fut?'is-future':''} ${y===dt.getFullYear()?'is-cur':''}" data-wy="${w.year}" data-ww="${w.week}" ${fut?'disabled':''}>
+        ${u ? `<img src="${esc(u)}" alt="">` : (fut ? '' : '<span class="plus">+</span>')}
+        <span class="lab">${y}<small>KW ${w.week}</small></span></button>`;
+    }).join('')}</div>
+    <div class="sect"><h2>alle Wochen</h2><span class="mono" style="color:var(--mute)">${wk.year} · ${sheetW.filter(w => S.weeks[wkKey(wk.year,w)]).length}/${nW}</span></div>
+    <div class="sheet">${sheetW.map(w => {
+      const rec = S.weeks[wkKey(wk.year, w)], u = rec && urls[rec.path];
+      const fut = mondayOf(wk.year, w) > tdy && !(wk.year === curWk.year && w === curWk.week);
+      return `<button class="${u?'has':''} ${w===wk.week?'sel':''} ${fut&&!u?'fut':''}" data-w="${w}">${u?`<img src="${esc(u)}" alt="" loading="lazy">`:''}<span>${pad(w)}</span></button>`;
+    }).join('')}</div>`;
+
+  $$('.strip .tile:not([disabled])').forEach(b => b.onclick = () => openWeekImage(+b.dataset.wy, +b.dataset.ww));
+  $$('.sheet button').forEach(b => b.onclick = () => {
+    const w = +b.dataset.w;
+    if (w === wk.week){ const fut = mondayOf(wk.year, w) > tdy; if (!fut || S.weeks[wkKey(wk.year,w)]) openWeekImage(wk.year, w); return; }
+    const m = mondayOf(wk.year, w); S.date = m > tdy ? (isoWeek(tdy).week === w ? tdy : m) : m;
+    render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+}
+
+/* ─────────── JAHR ─────────── */
+async function renderYear(){
+  const y = S.date.getFullYear(), tdy = today(), years = cycleYears(y);
+  app.innerHTML = `${shellTop()}
+    <header class="hero">
+      <div class="big" title="Datum wählen"><span class="num">${y}</span><span class="scr">Jahr</span></div>
+      <div class="nav"><button id="prev" aria-label="Vorjahr">${ICON.left}</button><button class="today mono" id="tdy">Heute</button><button id="next" aria-label="Nächstes Jahr">${ICON.right}</button></div>
+    </header>
+    <div class="ytabs">${years.map(yy => `<button data-y="${yy}" class="${yy===y?'on':''}">${yy}</button>`).join('')}</div>
+    <section id="yv"><div class="loading"><span class="spin"></span></div></section>`;
+  bindTop();
+  $$('.ytabs button').forEach(b => b.onclick = () => { const yy = +b.dataset.y; S.date = mk(yy, S.date.getMonth()+1, Math.min(S.date.getDate(), 28)); render(); });
+
+  const from = ymd(y,1,1), to = ymd(y,12,31);
+  const [e, v, w] = await Promise.all([
+    sb.from('entries').select('entry_date,text').gte('entry_date', from).lte('entry_date', to),
+    sb.from('voice_notes').select('entry_date').gte('entry_date', from).lte('entry_date', to),
+    sb.from('week_images').select('id', { count: 'exact', head: true }).eq('iso_year', y)
+  ]);
+  if (S.view !== 'year' || S.date.getFullYear() !== y) return;
+  const err = e.error || v.error || w.error; if (err) toast('Laden fehlgeschlagen: ' + err.message, 5000);
+  const T = new Set((e.data||[]).filter(r => (r.text||'').trim()).map(r => r.entry_date));
+  const V = new Set((v.data||[]).map(r => r.entry_date));
+  const days = new Set([...T, ...V]);
+
+  let rows = '';
+  for (let m = 1; m <= 12; m++){
+    const len = new Date(y, m, 0).getDate();
+    let cells = '';
+    for (let d = 1; d <= 31; d++){
+      if (d > len){ cells += '<button class="x" tabindex="-1"></button>'; continue; }
+      const k = ymd(y,m,d), dd = mk(y,m,d);
+      const cls = [T.has(k)?'t':'', V.has(k)?'v':'', dd > tdy?'f':'', k===dkey(tdy)?'today':''].join(' ');
+      cells += `<button class="${cls}" data-k="${k}" title="${d}. ${MONTHS[m-1]}"></button>`;
+    }
+    rows += `<div class="cal-row"><span class="ml">${MSHORT[m-1].toUpperCase()}</span>${cells}</div>`;
+  }
+  $('#yv').innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${days.size}</b><span class="mono">Tage</span></div>
+      <div class="stat"><b>${(v.data||[]).length}</b><span class="mono">Sprachnotizen</span></div>
+      <div class="stat"><b>${w.count ?? 0}</b><span class="mono">Wochenbilder</span></div>
+    </div>
+    <div class="cal">${rows}
+      <div class="legend mono"><span><i style="background:var(--ink)"></i>Text</span><span><i style="background:var(--pista)"></i>Sprachnotiz</span><span><i style="background:var(--grey-2)"></i>leer</span></div>
+    </div>`;
+  $$('.cal-row button[data-k]').forEach(b => b.onclick = () => { S.date = parse(b.dataset.k); S.view = 'day'; LS.set('view','day'); render(); window.scrollTo(0,0); });
+}
+
+/* ── Tabs, Tastatur, Wischen ───────────────────────── */
+$$('#tabbar button').forEach(b => b.onclick = () => { S.view = b.dataset.v; LS.set('view', S.view); render(); window.scrollTo(0,0); });
+document.addEventListener('keydown', e => {
+  if (!S.user || /INPUT|TEXTAREA/.test(document.activeElement?.tagName)) return;
+  if (e.key === 'Escape') closeLb();
+  if ($('.lb')) return;
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+let tx = null, ty = null;
+document.addEventListener('touchstart', e => {
+  if (e.target.closest('textarea,input,.vn,.cal,.lb,.sheet,.strip')) { tx = null; return; }
+  tx = e.touches[0].clientX; ty = e.touches[0].clientY;
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (tx === null || !S.user) return;
+  const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+  tx = null;
+  if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.8) step(dx < 0 ? 1 : -1);
+});
+// nach Mitternacht / Rückkehr in die App: "heute" aktualisieren
+let lastDay = dkey(today());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S.user && dkey(today()) !== lastDay){
+    if (dkey(S.date) === lastDay) S.date = today();
+    lastDay = dkey(today()); render();
+  }
+});
+
+boot();
+</script>
+</body>
+</html>
